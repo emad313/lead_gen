@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: leadgen
+      POSTGRES_USER: leadgen
+      POSTGRES_PASSWORD: leadgen
+    ports:
+      - "5432:5432"
+    volumes:
+      - leadgen-postgres:/var/lib/postgresql/data
+      - ./apps/api/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leadgen -d leadgen"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  leadgen-postgres:
