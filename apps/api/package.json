@@ -11,10 +11,15 @@
   "dependencies": {
     "@google\/generative-ai": "^0.24.1",
     "@fastify/cors": "^10.0.1",
+    "bullmq": "^5.34.8",
+    "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
+    "ioredis": "^5.4.1",
     "node-cron": "^3.0.3",
     "pg": "^8.13.1",
+    "robots-parser": "^3.0.1",
+    "tldts": "^6.1.76",
     "zod": "^3.24.1"
   },
   "devDependencies": {

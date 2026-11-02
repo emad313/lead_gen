@@ -76,3 +76,53 @@ export async function recordEvent(
     [leadId ?? null, eventType, status, details]
   );
 }
+
+export async function recordEvidence(
+  leadId: string,
+  sourceUrl: string,
+  sourceType: string,
+  summary: string
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO evidence (lead_id, source_url, source_type, observed_text_or_summary)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (lead_id, source_url) DO UPDATE SET
+       observed_text_or_summary = EXCLUDED.observed_text_or_summary,
+       captured_at = NOW()`,
+    [leadId, sourceUrl, sourceType, summary]
+  );
+}
+
+export async function recordDiscoveredEmail(
+  email: string,
+  sourceUrl: string,
+  status: string,
+  reason: string,
+  leadId?: string
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO discovered_emails (lead_id, email, source_url, verification_status, verification_reason)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (email, source_url) DO UPDATE SET
+       verification_status = EXCLUDED.verification_status,
+       verification_reason = EXCLUDED.verification_reason`,
+    [leadId ?? null, email, sourceUrl, status, reason]
+  );
+}
+
+export async function listCrawlJobs(limit = 20): Promise<LeadRow[]> {
+  const result = await pool.query(
+    `SELECT * FROM crawl_jobs ORDER BY created_at DESC LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 100)]
+  );
+  return result.rows;
+}
+
+export async function listActivityEvents(limit = 30): Promise<LeadRow[]> {
+  const result = await pool.query(
+    `SELECT event_id, lead_id, event_type, event_timestamp, status, details, error_code
+     FROM activity_events ORDER BY event_timestamp DESC LIMIT $1`,
+    [Math.min(Math.max(limit, 1), 100)]
+  );
+  return result.rows;
+}

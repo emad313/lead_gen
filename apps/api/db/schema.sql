@@ -57,6 +57,30 @@ CREATE TABLE IF NOT EXISTS activity_events (
   reference_url TEXT
 );
 
+CREATE TABLE IF NOT EXISTS discovered_emails (
+  email_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id UUID REFERENCES leads(lead_id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  verification_status TEXT NOT NULL,
+  verification_reason TEXT,
+  discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (email, source_url)
+);
+
+CREATE TABLE IF NOT EXISTS crawl_jobs (
+  job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+  seed_count INTEGER NOT NULL DEFAULT 0,
+  pages_crawled INTEGER NOT NULL DEFAULT 0,
+  emails_found INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS leads_status_idx ON leads (lead_status);
 CREATE INDEX IF NOT EXISTS follow_up_due_idx ON leads (follow_up_date, follow_up_status);
 CREATE INDEX IF NOT EXISTS activity_lead_idx ON activity_events (lead_id, event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS discovered_emails_email_idx ON discovered_emails (email);

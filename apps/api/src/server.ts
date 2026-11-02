@@ -4,10 +4,11 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { closeDatabase } from './db.js';
 import { leadInputSchema } from './domain.js';
-import { createLead, getLead, listLeads, recordEvent } from './repositories/leads.js';
+import { createLead, getLead, listActivityEvents, listCrawlJobs, listLeads, recordEvent } from './repositories/leads.js';
 import { notifyTelegram } from './integrations/telegram.js';
 import { analyzeLeadWithGemini } from './integrations/gemini.js';
 import { listEvidence } from './repositories/leads.js';
+import { discoveryQueue, getDiscoveryQueries, startDiscoveryWorker } from './services/discovery-queue.js';
 
 const app = Fastify({ logger: true });
 
@@ -25,6 +26,21 @@ app.get('/api/leads/:leadId', async (request, reply) => {
   const lead = await getLead(leadId);
   if (!lead) return reply.code(404).send({ error: 'Lead not found' });
   return { data: lead };
+});
+
+app.get('/api/operations', async () => {
+  const [jobs, activity] = await Promise.all([listCrawlJobs(), listActivityEvents()]);
+  const queue = await discoveryQueue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
+  return {
+    data: {
+      queries: getDiscoveryQueries(),
+      searchEnabled: Boolean(config.SEARXNG_URL),
+      schedule: 'Every day at 08:00 server time',
+      jobs,
+      activity,
+      queue
+    }
+  };
 });
 
 app.post('/api/leads', async (request, reply) => {
@@ -67,13 +83,43 @@ app.post('/api/leads/:leadId/analyze', async (request, reply) => {
 });
 
 app.post('/api/jobs/daily-discovery', async (_request, reply) => {
-  await recordEvent(undefined, 'daily_discovery_started', 'success');
-  await notifyTelegram('Lead generation daily workflow started. Source adapters are ready for configuration.');
-  return reply.code(202).send({ status: 'accepted' });
+  const seeds = config.DISCOVERY_SEEDS.split(',').map((seed) => seed.trim()).filter(Boolean);
+  if (!seeds.length && !config.SEARXNG_URL) {
+    return reply.code(400).send({
+      error: 'Automatic discovery requires SEARXNG_URL. DISCOVERY_SEEDS is optional.'
+    });
+  }
+  const job = await discoveryQueue.add('crawl-seeds', { seeds }, { removeOnComplete: 100, removeOnFail: 100 });
+  await recordEvent(undefined, 'daily_discovery_queued', 'success', {
+    jobId: job.id,
+    directSeedCount: seeds.length,
+    searchEnabled: Boolean(config.SEARXNG_URL)
+  });
+  let notificationStatus: 'sent' | 'failed' = 'sent';
+  try {
+    await notifyTelegram(`Lead discovery queued. ${config.SEARXNG_URL ? 'SearXNG web search is enabled.' : `${seeds.length} public seed(s) will be crawled.`}`);
+  } catch (error) {
+    notificationStatus = 'failed';
+    await recordEvent(undefined, 'telegram_notification_failed', 'failed', {
+      event: 'daily_discovery_queued',
+      error: error instanceof Error ? error.message : 'Unknown Telegram error'
+    });
+    app.log.error(error, 'Telegram notification failed after discovery was queued');
+  }
+  return reply.code(202).send({
+    status: 'accepted',
+    jobId: job.id,
+    directSeedCount: seeds.length,
+    searchEnabled: Boolean(config.SEARXNG_URL),
+    notificationStatus
+  });
 });
+
+const discoveryWorker = startDiscoveryWorker();
 
 cron.schedule('0 8 * * *', async () => {
   try {
+    await discoveryQueue.add('scheduled-discovery', { seeds: [] }, { removeOnComplete: 100, removeOnFail: 100 });
     await recordEvent(undefined, 'daily_discovery_started', 'success', { scheduled: true });
     await notifyTelegram('Lead generation daily workflow started.');
   } catch (error) {
@@ -82,6 +128,8 @@ cron.schedule('0 8 * * *', async () => {
 });
 
 const shutdown = async (): Promise<void> => {
+  await discoveryWorker.close();
+  await discoveryQueue.close();
   await app.close();
   await closeDatabase();
 };
