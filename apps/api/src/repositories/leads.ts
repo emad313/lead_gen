@@ -12,6 +12,11 @@ export async function listLeads(limit = 100): Promise<LeadRow[]> {
   return result.rows;
 }
 
+export async function listAllLeads(): Promise<LeadRow[]> {
+  const result = await pool.query(`SELECT * FROM leads ORDER BY updated_at ASC`);
+  return result.rows;
+}
+
 export async function getLead(leadId: string): Promise<LeadRow | undefined> {
   const result = await pool.query(`SELECT * FROM leads WHERE lead_id = $1`, [leadId]);
   return result.rows[0];

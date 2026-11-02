@@ -12,13 +12,14 @@ type Lead = {
 };
 type CrawlJob = { job_id: string; status: string; seed_count: number; pages_crawled: number; emails_found: number; error?: string; created_at: string; completed_at?: string };
 type Activity = { event_id: string; event_type: string; status: string; event_timestamp: string; details?: Record<string, unknown> };
-type Operations = { queries: string[]; searchEnabled: boolean; schedule: string; jobs: CrawlJob[]; activity: Activity[]; queue: Record<string, number> };
+type Operations = { queries: string[]; searchEnabled: boolean; schedule: string; jobs: CrawlJob[]; activity: Activity[]; queue: Record<string, number>; googleSheets: { configured: boolean; status: string } };
 
 const leads = ref<Lead[]>([]);
 const operations = ref<Operations | null>(null);
 const loading = ref(true);
 const error = ref('');
 const starting = ref(false);
+const syncingSheets = ref(false);
 const lastUpdated = ref<Date>();
 let timer: number | undefined;
 
@@ -56,6 +57,21 @@ async function startDiscovery(): Promise<void> {
   }
 }
 
+async function syncSheets(): Promise<void> {
+  syncingSheets.value = true;
+  error.value = '';
+  try {
+    const response = await fetch('http://localhost:3000/api/jobs/sync-sheets', { method: 'POST' });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || 'Google Sheets sync failed');
+    await loadLeads();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : 'Google Sheets sync failed';
+  } finally {
+    syncingSheets.value = false;
+  }
+}
+
 const activeJob = computed(() => operations.value?.jobs.find((job) => job.status === 'running') || operations.value?.jobs.find((job) => job.status === 'queued'));
 const latestJob = computed(() => operations.value?.jobs[0]);
 const isSearching = computed(() => Boolean(activeJob.value) || (operations.value?.queue.active ?? 0) > 0);
@@ -90,6 +106,11 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); });
         <div class="panel-heading"><div><p class="label">Automation</p><h2>Daily schedule</h2></div><span class="schedule-icon">↻</span></div>
         <p class="schedule">{{ operations?.schedule || 'Loading schedule...' }}</p>
         <p class="muted">Server timezone · Manual runs are always available.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-heading"><div><p class="label">Export</p><h2>Google Sheets</h2></div><span class="connected" v-if="operations?.googleSheets.configured">Ready</span><span class="disconnected" v-else>Not configured</span></div>
+        <p class="muted">{{ operations?.googleSheets.configured ? 'Lead rows can be upserted into your configured sheet.' : 'Add a service-account JSON path and Sheet ID to enable export.' }}</p>
+        <button class="secondary" :disabled="syncingSheets || !operations?.googleSheets.configured" @click="syncSheets">{{ syncingSheets ? 'Syncing...' : 'Sync all leads' }}</button>
       </div>
     </section>
 

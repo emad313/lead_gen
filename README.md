@@ -34,9 +34,15 @@ an existing local PostgreSQL installation.
 
 Google OAuth is optional for the current local workflow. Discovery, crawling,
 Gemini analysis, PostgreSQL persistence, Redis jobs, SearXNG search, and
-Telegram notifications do not require a Google refresh token. Gmail drafts and
-Google Sheets synchronization remain disabled until a future OAuth integration
-is explicitly enabled.
+Telegram notifications do not require a Google refresh token. Gmail drafts
+remain disabled until a future OAuth integration is explicitly enabled.
+
+Google Sheets export uses a service account. Set
+`GOOGLE_SERVICE_ACCOUNT_JSON_PATH` to a local service-account JSON file and
+`GOOGLE_SHEETS_ID` to the spreadsheet ID, then share the spreadsheet with the
+service account email as an editor. The dashboard's **Sync all leads** button
+upserts PostgreSQL leads into the configured `Leads` tab. Discovery also syncs
+newly qualified leads automatically when Sheets is configured.
 
 Set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` in `.env` to enable Gemini.
 `POST /api/leads/:leadId/analyze` performs evidence-grounded analysis and

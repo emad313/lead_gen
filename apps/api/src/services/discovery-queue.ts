@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { crawlSeed } from './crawler.js';
 import { pool } from '../db.js';
 import { createLead, recordDiscoveredEmail, recordEvent, recordEvidence } from '../repositories/leads.js';
+import { isGoogleSheetsConfigured, syncLeadToGoogleSheet } from '../integrations/google-sheets.js';
 
 const connection = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 export const discoveryQueue = new Queue('lead-discovery', { connection });
@@ -58,6 +59,17 @@ export function startDiscoveryWorker(): Worker {
             emailVerificationStatus: 'unavailable'
           });
           leadId = String(lead.lead_id);
+          if (isGoogleSheetsConfigured()) {
+            try {
+              await syncLeadToGoogleSheet(lead);
+              await recordEvent(leadId, 'google_sheet_sync', 'success', { trigger: 'discovery' });
+            } catch (error) {
+              await recordEvent(leadId, 'google_sheet_sync', 'failed', {
+                trigger: 'discovery',
+                error: error instanceof Error ? error.message : 'Unknown Sheets error'
+              });
+            }
+          }
           for (const page of intentPages) {
             await recordEvidence(leadId, page.url, 'website_crawl', page.text.slice(0, 4000));
           }

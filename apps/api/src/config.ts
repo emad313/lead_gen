@@ -25,6 +25,7 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REFRESH_TOKEN: z.string().optional(),
+  GOOGLE_SERVICE_ACCOUNT_JSON_PATH: z.string().optional(),
   GOOGLE_SHEETS_ID: z.string().optional(),
   GOOGLE_SHEETS_TAB: z.string().default('Leads')
 });

@@ -4,11 +4,12 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { closeDatabase } from './db.js';
 import { leadInputSchema } from './domain.js';
-import { createLead, getLead, listActivityEvents, listCrawlJobs, listLeads, recordEvent } from './repositories/leads.js';
+import { createLead, getLead, listActivityEvents, listAllLeads, listCrawlJobs, listLeads, recordEvent } from './repositories/leads.js';
 import { notifyTelegram } from './integrations/telegram.js';
 import { analyzeLeadWithGemini } from './integrations/gemini.js';
 import { listEvidence } from './repositories/leads.js';
 import { discoveryQueue, getDiscoveryQueries, startDiscoveryWorker } from './services/discovery-queue.js';
+import { isGoogleSheetsConfigured, syncLeadToGoogleSheet } from './integrations/google-sheets.js';
 
 const app = Fastify({ logger: true });
 
@@ -39,8 +40,27 @@ app.get('/api/operations', async () => {
       jobs,
       activity,
       queue
+      ,googleSheets: { configured: isGoogleSheetsConfigured(), status: isGoogleSheetsConfigured() ? 'ready' : 'disabled' }
     }
   };
+});
+
+app.post('/api/jobs/sync-sheets', async (_request, reply) => {
+  if (!isGoogleSheetsConfigured()) return reply.code(400).send({ error: 'Google Sheets service account and spreadsheet ID are not configured' });
+  const leads = await listAllLeads();
+  let synced = 0;
+  for (const lead of leads) {
+    try {
+      const result = await syncLeadToGoogleSheet(lead);
+      await recordEvent(String(lead.lead_id), 'google_sheet_sync', 'success', result);
+      synced += 1;
+    } catch (error) {
+      await recordEvent(String(lead.lead_id), 'google_sheet_sync', 'failed', {
+        error: error instanceof Error ? error.message : 'Unknown Sheets error'
+      });
+    }
+  }
+  return { data: { total: leads.length, synced, failed: leads.length - synced } };
 });
 
 app.post('/api/leads', async (request, reply) => {

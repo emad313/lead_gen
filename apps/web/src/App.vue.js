@@ -4,6 +4,7 @@ const operations = ref(null);
 const loading = ref(true);
 const error = ref('');
 const starting = ref(false);
+const syncingSheets = ref(false);
 const lastUpdated = ref();
 let timer;
 async function loadLeads() {
@@ -42,6 +43,23 @@ async function startDiscovery() {
     }
     finally {
         starting.value = false;
+    }
+}
+async function syncSheets() {
+    syncingSheets.value = true;
+    error.value = '';
+    try {
+        const response = await fetch('http://localhost:3000/api/jobs/sync-sheets', { method: 'POST' });
+        const body = await response.json();
+        if (!response.ok)
+            throw new Error(body.error || 'Google Sheets sync failed');
+        await loadLeads();
+    }
+    catch (cause) {
+        error.value = cause instanceof Error ? cause.message : 'Google Sheets sync failed';
+    }
+    finally {
+        syncingSheets.value = false;
     }
 }
 const activeJob = computed(() => operations.value?.jobs.find((job) => job.status === 'running') || operations.value?.jobs.find((job) => job.status === 'queued'));
@@ -159,6 +177,37 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
     ...{ class: "muted" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "panel" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "panel-heading" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "label" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2)({});
+if (__VLS_ctx.operations?.googleSheets.configured) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "connected" },
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "disconnected" },
+    });
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+    ...{ class: "muted" },
+});
+(__VLS_ctx.operations?.googleSheets.configured ? 'Lead rows can be upserted into your configured sheet.' : 'Add a service-account JSON path and Sheet ID to enable export.');
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.syncSheets) },
+    ...{ class: "secondary" },
+    disabled: (__VLS_ctx.syncingSheets || !__VLS_ctx.operations?.googleSheets.configured),
+});
+(__VLS_ctx.syncingSheets ? 'Syncing...' : 'Sync all leads');
 __VLS_asFunctionalElement(__VLS_intrinsicElements.section, __VLS_intrinsicElements.section)({
     ...{ class: "panel search-panel" },
 });
@@ -321,6 +370,13 @@ for (const [event] of __VLS_getVForSourceType((__VLS_ctx.operations?.activity.sl
 /** @type {__VLS_StyleScopedClasses['schedule']} */ ;
 /** @type {__VLS_StyleScopedClasses['muted']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel-heading']} */ ;
+/** @type {__VLS_StyleScopedClasses['label']} */ ;
+/** @type {__VLS_StyleScopedClasses['connected']} */ ;
+/** @type {__VLS_StyleScopedClasses['disconnected']} */ ;
+/** @type {__VLS_StyleScopedClasses['muted']} */ ;
+/** @type {__VLS_StyleScopedClasses['secondary']} */ ;
+/** @type {__VLS_StyleScopedClasses['panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['search-panel']} */ ;
 /** @type {__VLS_StyleScopedClasses['panel-heading']} */ ;
 /** @type {__VLS_StyleScopedClasses['label']} */ ;
@@ -355,9 +411,11 @@ const __VLS_self = (await import('vue')).defineComponent({
             loading: loading,
             error: error,
             starting: starting,
+            syncingSheets: syncingSheets,
             lastUpdated: lastUpdated,
             loadLeads: loadLeads,
             startDiscovery: startDiscovery,
+            syncSheets: syncSheets,
             activeJob: activeJob,
             latestJob: latestJob,
             isSearching: isSearching,
